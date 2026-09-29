@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>ModSource.Server</AssemblyName>
+    <RootNamespace>ModSource.Server</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="SPTarkov.Server.Core">
+      <HintPath>References\SPTarkov.Server.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SPTarkov.DI">
+      <HintPath>References\SPTarkov.DI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SPTarkov.Common">
+      <HintPath>References\SPTarkov.Common.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>References\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SemanticVersioning">
+      <HintPath>References\SemanticVersioning.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions">
+      <HintPath>References\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="config.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
