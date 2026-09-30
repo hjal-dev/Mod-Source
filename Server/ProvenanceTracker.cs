@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Threading.Tasks;
 
 namespace ModSource.Server;
 
@@ -69,32 +68,17 @@ public static class ProvenanceTracker
         }
     }
 
-    public static Task Complete(Type owner, Task original)
+    public static void End(Type owner)
     {
-        if (!Active)
-        {
-            return original ?? Task.CompletedTask;
-        }
-
-        if (original is null)
+        if (Active)
         {
             Diff(owner);
-            return Task.CompletedTask;
         }
-
-        return Continue(owner, original);
     }
 
-    private static async Task Continue(Type owner, Task original)
+    public static void Stop()
     {
-        try
-        {
-            await original.ConfigureAwait(false);
-        }
-        finally
-        {
-            Diff(owner);
-        }
+        Active = false;
     }
 
     private static void Diff(Type owner)

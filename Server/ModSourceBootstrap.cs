@@ -3,16 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using HarmonyLib;
 using Microsoft.Extensions.DependencyInjection;
+using SPTarkov.DI;
 using SPTarkov.Server.Core.DI;
 using SPTarkov.Server.Core.Models.Common;
 using SPTarkov.Server.Core.Models.Spt.Tables;
-using SPTarkov.Server.Core.Services.Hosted;
 
 namespace ModSource.Server;
 
@@ -24,7 +21,7 @@ public sealed class ModSourceBootstrap : IOnDIConstruct
 
     public static ModSourceConfig Config { get; private set; } = new();
 
-    public static int DispatchSitesPatched { get; private set; }
+    public static bool Tracking { get; private set; }
 
     public static int TrackedModAssemblyCount => _modAssemblies.Count;
 
@@ -93,12 +90,13 @@ public sealed class ModSourceBootstrap : IOnDIConstruct
 
             if (!Config.TrackLoadOrder)
             {
+                ProvenanceTracker.Stop();
                 Log("Load-order tracking disabled by config; relying on CustomItemService and bundle attribution only.");
                 return Task.CompletedTask;
             }
 
             _modAssemblies = ModAssemblies(typeof(ModSourceBootstrap).Assembly).ToHashSet();
-            InstallDispatchPatches();
+            WatchLoadSteps(serviceCollection);
         }
         catch (Exception ex)
         {
@@ -132,95 +130,20 @@ public sealed class ModSourceBootstrap : IOnDIConstruct
         return sources;
     }
 
-    private static void InstallDispatchPatches()
+    private static void WatchLoadSteps(IServiceCollection serviceCollection)
     {
-        var harmony = new Harmony("com.hj.modsource.server");
-        var transpiler = new HarmonyMethod(typeof(OnLoadDispatchPatch).GetMethod(nameof(OnLoadDispatchPatch.Transpiler)));
-
-        (string Label, Type Host)[] hosts =
-        [
-            ("ProgramExtensions (pre-SPT load)", AccessTools.TypeByName("SPTarkov.Server.Extensions.ProgramExtensions")),
-            ("SPTStartupHostedService (main load)", typeof(SPTStartupHostedService)),
-        ];
-
-        var patched = 0;
-        foreach (var (label, host) in hosts)
+        var descriptor = serviceCollection.FirstOrDefault(d => d.ServiceType == typeof(IReadOnlyList<DependencyInjectionContainer>));
+        if (descriptor?.ImplementationInstance is not IReadOnlyList<DependencyInjectionContainer> steps)
         {
-            if (host is null)
-            {
-                Log($"Could not locate {label}; mods loaded in that phase will not be tracked.");
-                continue;
-            }
-
-            var sites = FindDispatchSites(host).ToList();
-            if (sites.Count == 0)
-            {
-                Log($"No IOnLoad.OnLoadAsync call found in {label}; mods loaded in that phase will not be tracked.");
-                continue;
-            }
-
-            foreach (var moveNext in sites)
-            {
-                patched += PatchDispatch(harmony, transpiler, $"{label} {moveNext.DeclaringType?.Name}", moveNext);
-            }
+            ProvenanceTracker.Stop();
+            Log("Could not find SPT's load step list; load-order tracking unavailable.");
+            return;
         }
 
-        DispatchSitesPatched = patched;
-    }
-
-    private static IEnumerable<MethodInfo> FindDispatchSites(Type host)
-    {
-        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static
-            | BindingFlags.DeclaredOnly;
-
-        foreach (var method in host.GetMethods(all))
-        {
-            var moveNext = method.GetCustomAttribute<AsyncStateMachineAttribute>()
-                ?.StateMachineType.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-            if (moveNext is null)
-            {
-                continue;
-            }
-
-            List<CodeInstruction> body;
-            try
-            {
-                body = PatchProcessor.GetOriginalInstructions(moveNext);
-            }
-            catch
-            {
-                continue;
-            }
-
-            if (body.Any(i => i.operand is MethodInfo called && called.Equals(OnLoadDispatchPatch.Target)))
-            {
-                yield return moveNext;
-            }
-        }
-    }
-
-    private static int PatchDispatch(Harmony harmony, HarmonyMethod transpiler, string label, MethodInfo moveNext)
-    {
-        try
-        {
-            OnLoadDispatchPatch.Replaced = 0;
-            harmony.Patch(moveNext, transpiler: transpiler);
-
-            if (OnLoadDispatchPatch.Replaced == 0)
-            {
-                Log($"No IOnLoad.OnLoadAsync call found in {label}; mods loaded in that phase will not be tracked.");
-                return 0;
-            }
-
-            Log($"Hooked IOnLoad dispatch in {label}.");
-            return 1;
-        }
-        catch (Exception ex)
-        {
-            Log($"Could not hook {label}: {ex.Message}");
-            return 0;
-        }
+        serviceCollection.Remove(descriptor);
+        serviceCollection.AddSingleton<IReadOnlyList<DependencyInjectionContainer>>(new LoadStepList(steps));
+        Tracking = true;
+        Log($"Watching {steps.Count} load steps for {_modAssemblies.Count} mod assemblies. No code is patched.");
     }
 
     private static IEnumerable<Assembly> ModAssemblies(Assembly self)
@@ -253,54 +176,5 @@ public sealed class ModSourceBootstrap : IOnDIConstruct
                 yield return assembly;
             }
         }
-    }
-}
-
-public static class OnLoadDispatchPatch
-{
-    internal static int Replaced;
-
-    internal static readonly MethodInfo Target = AccessTools.Method(typeof(IOnLoad), nameof(IOnLoad.OnLoadAsync));
-    private static readonly MethodInfo Wrapper = AccessTools.Method(typeof(OnLoadDispatchPatch), nameof(Invoke));
-
-    public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-    {
-        foreach (var instruction in instructions)
-        {
-            if ((instruction.opcode == OpCodes.Callvirt || instruction.opcode == OpCodes.Call)
-                && instruction.operand is MethodInfo method
-                && method.Equals(Target))
-            {
-                instruction.opcode = OpCodes.Call;
-                instruction.operand = Wrapper;
-                Replaced++;
-            }
-
-            yield return instruction;
-        }
-    }
-
-    public static Task Invoke(IOnLoad onLoad, CancellationToken cancellationToken)
-    {
-        var type = onLoad.GetType();
-        if (!ModSourceBootstrap.IsTrackedModType(type))
-        {
-            return onLoad.OnLoadAsync(cancellationToken);
-        }
-
-        ProvenanceTracker.Begin(type);
-
-        Task task;
-        try
-        {
-            task = onLoad.OnLoadAsync(cancellationToken);
-        }
-        catch
-        {
-            ProvenanceTracker.Complete(type, null);
-            throw;
-        }
-
-        return ProvenanceTracker.Complete(type, task);
     }
 }

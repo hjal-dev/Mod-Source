@@ -51,6 +51,7 @@ public sealed class ModSourceService(
         var config = ModSourceBootstrap.Config;
         var debug = config.DebugLogging;
 
+        ProvenanceTracker.Stop();
         FlushBootstrapLog(debug);
 
         var modsByAssembly = BuildAssemblyIndex();
@@ -202,8 +203,8 @@ public sealed class ModSourceService(
         {
             DebugLog($"[ModSource] Indexed {bundleCount} bundles from {bundleOwners.Values.Distinct().Count()} bundle mods.");
             DebugLog(
-                $"[ModSource] Load-order tracking: {ModSourceBootstrap.DispatchSitesPatched}/2 SPT dispatch sites hooked, "
-                    + $"{ModSourceBootstrap.TrackedModAssemblyCount} mod assemblies tracked. No mod code is patched."
+                $"[ModSource] Load-order tracking: {(ModSourceBootstrap.Tracking ? "on" : "off")}, "
+                    + $"{ModSourceBootstrap.TrackedModAssemblyCount} mod assemblies tracked. No code is patched."
             );
         }
     }

@@ -23,10 +23,6 @@
       <HintPath>References\SPTarkov.Common.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>References\0Harmony.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="SemanticVersioning">
       <HintPath>References\SemanticVersioning.dll</HintPath>
       <Private>False</Private>
