@@ -61,7 +61,67 @@ namespace ModSource
 
             label.text = text;
             label.gameObject.SetActive(true);
-            Layout(label);
+            MatchWeightStyle(label, labels._weightText);
+
+            var preview = (RectTransform)labels._previewPanel.transform;
+            var right = RightMargin(labels, preview);
+            Layout(label, right, MasteringBaseline(panel, preview) ?? right);
+        }
+
+        private static void MatchWeightStyle(TMP_Text label, TMP_Text weight)
+        {
+            if (!weight.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            weight.ForceMeshUpdate();
+            label.enableAutoSizing = false;
+            label.fontSize = weight.fontSize;
+            label.fontWeight = weight.fontWeight;
+            label.fontStyle = weight.fontStyle;
+            label.characterSpacing = weight.characterSpacing;
+        }
+
+        private static float RightMargin(ItemInfoWindowLabels labels, RectTransform preview)
+        {
+            var weight = labels._weightText;
+            if (!weight.gameObject.activeInHierarchy || string.IsNullOrEmpty(weight.text))
+            {
+                return Padding;
+            }
+
+            weight.ForceMeshUpdate();
+            if (weight.textInfo == null || weight.textInfo.characterCount == 0)
+            {
+                return Padding;
+            }
+
+            var topRight = preview.InverseTransformPoint(weight.rectTransform.TransformPoint(weight.textBounds.max));
+            var right = preview.rect.xMax - topRight.x;
+
+            return right > 0f && right < 40f ? right : Padding;
+        }
+
+        private static float? MasteringBaseline(ItemSpecificationPanel panel, RectTransform preview)
+        {
+            var mastering = panel._masteringText;
+            if (mastering == null || string.IsNullOrEmpty(mastering.text))
+            {
+                return null;
+            }
+
+            mastering.ForceMeshUpdate(true);
+            var info = mastering.textInfo;
+            if (info == null || info.characterCount == 0 || info.lineCount == 0)
+            {
+                return null;
+            }
+
+            var baseline = mastering.rectTransform.TransformPoint(new Vector3(0f, info.lineInfo[0].baseline, 0f));
+            var height = preview.InverseTransformPoint(baseline).y - preview.rect.yMin;
+
+            return height > 0f && height < 60f ? height : (float?)null;
         }
 
         private static string BuildText(Item item, ModSourceEntry entry)
@@ -128,19 +188,36 @@ namespace ModSource
             return tmp;
         }
 
-        private static void Layout(TMP_Text label)
+        private static void Layout(TMP_Text label, float right, float baseline)
         {
             var rect = label.rectTransform;
             rect.localScale = Vector3.one;
             rect.localRotation = Quaternion.identity;
 
-            rect.anchorMin = new Vector2(LeftLimit, 0f);
-            rect.anchorMax = new Vector2(1f, 0f);
             rect.pivot = new Vector2(1f, 0f);
 
             var height = Mathf.Max(label.preferredHeight, 18f);
-            rect.sizeDelta = new Vector2(-Padding, height);
-            rect.anchoredPosition = new Vector2(-Padding, Padding);
+
+            rect.anchorMin = new Vector2(1f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.sizeDelta = new Vector2(label.preferredWidth, height);
+            rect.anchoredPosition = Vector2.zero;
+            label.ForceMeshUpdate();
+
+            var offsetX = right;
+            var offsetY = baseline;
+            var info = label.textInfo;
+            if (info != null && info.characterCount > 0 && info.lineCount > 0)
+            {
+                var box = rect.rect;
+                offsetX = right - (box.xMax - label.textBounds.max.x);
+                offsetY = baseline - (info.lineInfo[0].baseline - box.yMin);
+            }
+
+            rect.anchorMin = new Vector2(LeftLimit, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.sizeDelta = new Vector2(-offsetX, height);
+            rect.anchoredPosition = new Vector2(-offsetX, offsetY);
         }
 
         internal static void LogLookup(Item item, ModSourceEntry entry)
