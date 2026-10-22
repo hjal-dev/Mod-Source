@@ -5,7 +5,7 @@ using HarmonyLib;
 
 namespace ModSource
 {
-    [BepInPlugin("com.hj.modsource", "Hj's Mod Source", "1.0.1")]
+    [BepInPlugin("com.hj.modsource", "Hj's Mod Source", "1.1.0")]
     public class ModSourcePlugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
