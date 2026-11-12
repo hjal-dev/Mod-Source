@@ -117,6 +117,16 @@ namespace ModSource
             return _items.TryGetValue(templateId, out entry) ? entry : null;
         }
 
+        public static bool IsShown(ModSourceEntry entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(entry.ModName) || string.IsNullOrEmpty(entry.ModGuid))
+            {
+                return false;
+            }
+
+            return entry.Source != "NameMatch" || ModSourcePlugin.ShowLowConfidence.Value;
+        }
+
         public static ModSourceEntry LookupQuest(string questId)
         {
             return Find(_quests, questId);
