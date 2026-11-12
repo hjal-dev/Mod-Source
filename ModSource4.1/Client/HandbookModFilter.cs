@@ -9,6 +9,7 @@ using EFT.InventoryLogic;
 using EFT.UI;
 using EFT.UI.Ragfair;
 using HarmonyLib;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -146,7 +147,7 @@ namespace ModSource
 
                 var id = TemplateId(node);
                 var entry = ModSourceClientDatabase.Lookup(id);
-                if (!Listed(entry))
+                if (!ModSourceClientDatabase.IsShown(entry))
                 {
                     continue;
                 }
@@ -291,9 +292,32 @@ namespace ModSource
             _dropdown._maxVisibleHeight = Mathf.Max(_dropdown._maxVisibleHeight, ListHeight);
             _dropdown.OnValueChanged.Subscribe(OnSelected);
 
+            MarqueeText.Attach(_dropdown._currentValueText);
+            var elementTexts = _dropdown._elementTemplate.GetComponentsInChildren<TextMeshProUGUI>(true);
+            if (elementTexts.Length > 0)
+            {
+                MarqueeText.Attach(elementTexts[0]);
+            }
+
+            HoverHighlight.Attach(_dropdown._elementTemplate.gameObject, true);
+            HoverHighlight.Attach(copy, false);
+
             copy.transform.SetAsLastSibling();
             Sync();
             return true;
+        }
+
+        public void CloseMenu()
+        {
+            if (_dropdown != null && _dropdown.CurrentState)
+            {
+                _dropdown.ToggleMenu(false);
+            }
+        }
+
+        private void OnDisable()
+        {
+            CloseMenu();
         }
 
         private void LateUpdate()
@@ -459,16 +483,6 @@ namespace ModSource
             return item != null ? item.TemplateId.ToString() : node.Data.Id;
         }
 
-        private static bool Listed(ModSourceEntry entry)
-        {
-            if (entry == null || string.IsNullOrEmpty(entry.ModName) || string.IsNullOrEmpty(entry.ModGuid))
-            {
-                return false;
-            }
-
-            return entry.Source != "NameMatch" || ModSourcePlugin.ShowLowConfidence.Value;
-        }
-
         private static void Watch(Task task)
         {
             task.ContinueWith(
@@ -527,6 +541,27 @@ namespace ModSource
             try
             {
                 HandbookModFilter.Attach(__instance._categoriesPanel);
+            }
+            catch (Exception ex)
+            {
+                ModSourcePlugin.Log.LogError("[ModSource] Handbook mod filter failed: " + ex);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(HandbookScreen), nameof(HandbookScreen.Close))]
+    public static class HandbookScreenClosePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix()
+        {
+            try
+            {
+                var filter = HandbookModFilter.Current;
+                if (filter != null)
+                {
+                    filter.CloseMenu();
+                }
             }
             catch (Exception ex)
             {

@@ -5,13 +5,15 @@ using HarmonyLib;
 
 namespace ModSource
 {
-    [BepInPlugin("com.hj.modsource", "Hj's Mod Source", "1.1.0")]
+    [BepInPlugin("com.hj.modsource", "Hj's Mod Source", "1.2.0")]
+    [BepInDependency(TaskSearchModNamePatch.TaskSearchGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public class ModSourcePlugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
 
         internal static ConfigEntry<bool> DebugLogging;
         internal static ConfigEntry<bool> ShowLowConfidence;
+        internal static ConfigEntry<bool> AlwaysScrollModNames;
 
         private void Awake()
         {
@@ -31,6 +33,14 @@ namespace ModSource
                 "Show guesses based only on the item's internal name matching an installed mod's GUID or "
                     + "assembly name. Off by default because that is a convention some mods follow, not a rule, "
                     + "and a cloned item can carry the original mod's name. Shown with a trailing '?'."
+            );
+
+            AlwaysScrollModNames = Config.Bind(
+                "Handbook",
+                "alwaysScrollModNames",
+                false,
+                "Scroll mod names that are too long for the handbook mod filter all the time, "
+                    + "instead of only while the mouse is over them."
             );
 
             ModSourceClientDatabase.BeginLoad();
